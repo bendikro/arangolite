@@ -35,6 +35,7 @@ func TestIsErrUnique(t *testing.T) {
 	assertTrue(t, IsErrUnique(err), "Error code does not match!")
 }
 
+
 func TestGetErrorNum(t *testing.T) {
 	err := errors.Wrap(errors.New("Error message"), "the database execution returned an error")
 	err = withErrorNum(err, 1207)
