@@ -181,39 +181,41 @@ func TestRun(t *testing.T) {
 		},
 		{
 			description: "database execution empty parsed result 1",
-			dbHandler: cursorHandler(
+			dbHandler: handler(
 				200,
-				[]string{
-					`{"id":"24292","name":"items","waitForSync":false,"isVolatile":false,"isSystem":false,"status":3,"type":2,"error":false,"code":200}`,
-				},
-				"foobar",
+				`{"id":"24292","name":"items","waitForSync":false,"isVolatile":false,"isSystem":false,"status":3,"type":2,"error":false,"code":200}`,
 			),
 			testErr: func(err error) bool { return err == nil },
-			result:  []arangolite.Document{},
+			result:  []arangolite.Document{{ID: "24292"}},
 		},
 		{
-			description: "database execution empty parsed result 2",
-			dbHandler: cursorHandler(
+			description: "database execution database error",
+			dbHandler: handler(
 				404,
-				[]string{
-					`{"error":true,"code":404,"errorNum":1203,"errorMessage":"unknown collection 'items'"}`,
-				},
-				"foobar",
+				`{"error":true,"code":404,"errorNum":1203,"errorMessage":"unknown collection 'items'"}`,
 			),
-			testErr: func(err error) bool { return err == nil },
+			testErr: func(err error) bool {
+				return arangolite.HasStatusCode(err, 404) && arangolite.HasErrorNum(err, 1203)
+			},
 			result:  []arangolite.Document{},
 		},
 		{
-			description: "database execution empty parsed result  3",
-			dbHandler: cursorHandler(
+			description: "database execution empty parsed result 3",
+			dbHandler: handler(
 				200,
-				[]string{
-					`{"id":"node_port_relations/365","type":"hash","fields":["property"],"selectivityEstimate":0.03125,"unique":false,"sparse":false,"isNewlyCreated":false,"error":false,"code":200}`,
-				},
-				"foobar",
+				`{"id":"node_port_relations/365","type":"hash","fields":["property"],"selectivityEstimate":0.03125,"unique":false,"sparse":false,"isNewlyCreated":false,"error":false,"code":200}`,
 			),
 			testErr: func(err error) bool { return err == nil },
-			result:  []arangolite.Document{},
+			result:  []arangolite.Document{{ID: "node_port_relations/365"}},
+		},
+		{
+			description: "database execution get version",
+			dbHandler: handler(
+				200,
+				`{"server":"arango","version":"3.0.12"}`,
+			),
+			testErr: func(err error) bool { return err == nil },
+			result:  requests.GetVersionResult{Server: "arango", Version: "3.0.12"},
 		},
 	}
 
@@ -339,6 +341,60 @@ func TestSend(t *testing.T) {
 			}
 			if !reflect.DeepEqual(tc.cursor, result.Cursor()) {
 				t.Errorf("unexpected cursor. Expected %v, got %v", tc.cursor, result.Cursor())
+			}
+		})
+	}
+}
+
+func TestGetVersion(t *testing.T) {
+	client, server := httpMock()
+	defer server.Close()
+
+	var testCases = []struct {
+		// Case description
+		description string
+		detailed bool
+		// Arguments
+		dbHandler http.HandlerFunc
+		// Expected results
+		testErr func(err error) bool
+		result  interface{}
+	}{
+		{
+			description: "database execution requests.GetVersion",
+			detailed: false,
+			dbHandler: handler(200, `{"server":"arango","version":"3.0.12"}`),
+			testErr: func(err error) bool { return err == nil },
+			result:  requests.GetVersionResult{Server: "arango", Version: "3.0.12"},
+		},
+		{
+			description: "database execution requests.GetVersion detailed",
+			detailed: true,
+			dbHandler: handler(
+				200,
+				`{"server":"arango","version":"3.0.10","details":{"architecture":"64bit","asan":"false","asm-crc32":"true","boost-version":"1.61.0b1","build-date":"2016-09-26 10:56:13","compiler":"gcc","cplusplus":"201103","endianness":"little","fd-client-event-handler":"poll","fd-setsize":"1024","icu-version":"54.1","jemalloc":"true","libev-version":"4.22","maintainer-mode":"false","openssl-version":"OpenSSL 1.0.1k 8 Jan 2015","rocksdb-version":"4.8.0","server-version":"3.0.10","sizeof int":"4","sizeof void*":"8","sse42":"false","tcmalloc":"false","v8-version":"5.0.71.39","vpack-version":"0.1.30","zlib-version":"1.2.8","mode":"server"}}`,
+			),
+			testErr: func(err error) bool { return err == nil },
+			result:  requests.GetVersionResult{
+				Server: "arango",
+				Version: "3.0.12",
+				Details: map[string]string{"architecture":"64bit"}},
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			server.Config.Handler = tc.dbHandler
+			db := arangolite.NewDatabase(arangolite.OptHTTPClient(client))
+			var version requests.GetVersionResult
+			err := db.Run(ctx, &version, &requests.GetVersion{Details: tc.detailed})
+
+			if ok := tc.testErr(err); !ok {
+				t.Errorf("unexpected error: %s", err)
+			}
+			if !reflect.DeepEqual(tc.result, version) {
+				t.Errorf("unexpected result. Expected %v, got %v", tc.result, version)
 			}
 		})
 	}
