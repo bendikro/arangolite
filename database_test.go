@@ -179,6 +179,42 @@ func TestRun(t *testing.T) {
 			testErr: func(err error) bool { return err == nil },
 			result:  []arangolite.Document{{ID: "1234"}, {ID: "4321"}},
 		},
+		{
+			description: "database execution empty parsed result 1",
+			dbHandler: cursorHandler(
+				200,
+				[]string{
+					`{"id":"24292","name":"items","waitForSync":false,"isVolatile":false,"isSystem":false,"status":3,"type":2,"error":false,"code":200}`,
+				},
+				"foobar",
+			),
+			testErr: func(err error) bool { return err == nil },
+			result:  []arangolite.Document{},
+		},
+		{
+			description: "database execution empty parsed result 2",
+			dbHandler: cursorHandler(
+				404,
+				[]string{
+					`{"error":true,"code":404,"errorNum":1203,"errorMessage":"unknown collection 'items'"}`,
+				},
+				"foobar",
+			),
+			testErr: func(err error) bool { return err == nil },
+			result:  []arangolite.Document{},
+		},
+		{
+			description: "database execution empty parsed result  3",
+			dbHandler: cursorHandler(
+				200,
+				[]string{
+					`{"id":"node_port_relations/365","type":"hash","fields":["property"],"selectivityEstimate":0.03125,"unique":false,"sparse":false,"isNewlyCreated":false,"error":false,"code":200}`,
+				},
+				"foobar",
+			),
+			testErr: func(err error) bool { return err == nil },
+			result:  []arangolite.Document{},
+		},
 	}
 
 	ctx := context.Background()
